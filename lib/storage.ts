@@ -8,12 +8,11 @@ const META_STORE = 'meta_store';
 
 const LOCAL_STORAGE_TRIPS_KEY = 'nocturne_ledger_trips_v1';
 const LOCAL_STORAGE_PROFILE_KEY = 'nocturne_ledger_user_profile_v1';
-const LOCAL_STORAGE_ACTIVE_TRIP_KEY = 'nocturne_ledger_active_trip_v1';
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
-  id: 'member-priya',
-  name: 'Priya',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  id: '',
+  name: '',
+  avatarUrl: '',
   preferredPaymentMode: 'UPI',
 };
 
@@ -85,7 +84,7 @@ export async function loadTripsFromStorage(): Promise<Trip[]> {
     console.error('LocalStorage read failed:', e);
   }
 
-  // Fallback to initial seed data
+  // Fallback to empty trips initial state
   return INITIAL_TRIPS;
 }
 

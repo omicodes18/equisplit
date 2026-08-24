@@ -23,18 +23,21 @@ export function AddExpenseModal({
   defaultPayerId,
   defaultPaymentMode = 'UPI',
 }: AddExpenseModalProps) {
-  const [amount, setAmount] = useState('450');
+  const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [paidBy, setPaidBy] = useState(defaultPayerId || members[0]?.id || '');
   const [splitBetween, setSplitBetween] = useState<string[]>(members.map((m) => m.id));
   const [paymentMode, setPaymentMode] = useState<PaymentMode>(defaultPaymentMode);
   const [error, setError] = useState('');
 
-  // Update default payment mode and payer whenever modal opens or defaults change
+  // Update default payment mode, payer, and split list whenever modal opens
   useEffect(() => {
     if (isOpen) {
+      setAmount('');
+      setDescription('');
+      setError('');
       if (defaultPaymentMode) setPaymentMode(defaultPaymentMode);
-      if (defaultPayerId) setPaidBy(defaultPayerId);
+      setPaidBy(defaultPayerId || members[0]?.id || '');
       setSplitBetween(members.map((m) => m.id));
     }
   }, [isOpen, defaultPaymentMode, defaultPayerId, members]);
@@ -52,7 +55,7 @@ export function AddExpenseModal({
 
   const handleSelectAll = () => {
     if (splitBetween.length === members.length) {
-      setSplitBetween([paidBy]);
+      setSplitBetween([paidBy || members[0]?.id || '']);
     } else {
       setSplitBetween(members.map((m) => m.id));
     }
@@ -85,7 +88,9 @@ export function AddExpenseModal({
       lower.includes('dinner') ||
       lower.includes('cafe') ||
       lower.includes('sushi') ||
-      lower.includes('thalassa')
+      lower.includes('restaurant') ||
+      lower.includes('pizza') ||
+      lower.includes('burger')
     )
       icon = '🍽️';
     else if (
@@ -93,14 +98,17 @@ export function AddExpenseModal({
       lower.includes('cab') ||
       lower.includes('taxi') ||
       lower.includes('uber') ||
-      lower.includes('fuel')
+      lower.includes('fuel') ||
+      lower.includes('petrol') ||
+      lower.includes('flight')
     )
       icon = '🛵';
     else if (
       lower.includes('drink') ||
       lower.includes('beer') ||
       lower.includes('bar') ||
-      lower.includes('cocktail')
+      lower.includes('cocktail') ||
+      lower.includes('coffee')
     )
       icon = '🍻';
     else if (
@@ -108,13 +116,15 @@ export function AddExpenseModal({
       lower.includes('hotel') ||
       lower.includes('room') ||
       lower.includes('stay') ||
-      lower.includes('cabin')
+      lower.includes('cabin') ||
+      lower.includes('resort')
     )
       icon = '🏖️';
     else if (
       lower.includes('grocer') ||
       lower.includes('snack') ||
-      lower.includes('market')
+      lower.includes('market') ||
+      lower.includes('supplies')
     )
       icon = '🥥';
 
@@ -191,7 +201,7 @@ export function AddExpenseModal({
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What was this for? (e.g. Lunch, Cab)"
+                placeholder="What was this for? (e.g. Lunch, Cab, Groceries)"
                 className="w-full bg-transparent text-sm text-on-surface focus:outline-none placeholder-on-surface/40"
               />
             </div>
@@ -229,7 +239,7 @@ export function AddExpenseModal({
               <button
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs font-semibold text-primary active:scale-95 transition-transform"
+                className="text-xs font-semibold text-primary active:scale-95 transition-transform cursor-pointer"
               >
                 {splitBetween.length === members.length ? 'Deselect All' : 'Select All'}
               </button>
@@ -245,8 +255,11 @@ export function AddExpenseModal({
                     className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-lowest/60 border border-white/5 active:scale-[0.98] transition-all cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-xs">
-                        {m.name.charAt(0)}
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs text-black"
+                        style={{ backgroundColor: m.avatarColor || '#f472b6' }}
+                      >
+                        {m.name.charAt(0).toUpperCase()}
                       </div>
                       <span className="text-xs sm:text-sm font-medium text-on-surface">
                         {m.name}
@@ -281,13 +294,13 @@ export function AddExpenseModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 px-4 rounded-full border border-white/15 text-xs sm:text-sm font-bold text-on-surface-variant active:scale-[0.98] transition-transform"
+              className="flex-1 py-3 px-4 rounded-full border border-white/15 text-xs sm:text-sm font-bold text-on-surface-variant active:scale-[0.98] transition-transform cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-[2] py-3 px-4 rounded-full bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-[0_0_20px_rgba(244,114,182,0.35)] active:scale-[0.98] transition-transform flex items-center justify-center gap-1.5"
+              className="flex-[2] py-3 px-4 rounded-full bg-primary text-on-primary text-xs sm:text-sm font-bold shadow-[0_0_20px_rgba(244,114,182,0.35)] active:scale-[0.98] transition-transform flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>Save Expense</span>
             </button>

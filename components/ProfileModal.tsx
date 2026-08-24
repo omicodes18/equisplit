@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trip, UserProfile, PaymentMode } from '@/lib/types';
 import { calculateBalances, formatINR, triggerConfetti } from '@/lib/utils';
 import { FairyAvatar } from './FairyAvatar';
@@ -27,11 +27,11 @@ interface ProfileModalProps {
 
 const AVATAR_PRESETS = [
   {
-    label: 'Fairy Priya',
+    label: 'Fairy',
     url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   },
   {
-    label: 'Aura',
+    label: 'Sparkle',
     url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
   },
   {
@@ -51,13 +51,23 @@ export function ProfileModal({
   onSaveProfile,
   trips,
 }: ProfileModalProps) {
-  const [name, setName] = useState(userProfile.name);
+  const [name, setName] = useState(userProfile.name || '');
   const [avatarUrl, setAvatarUrl] = useState(userProfile.avatarUrl || '');
   const [preferredMode, setPreferredMode] = useState<PaymentMode>(
     userProfile.preferredPaymentMode || 'UPI'
   );
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'edit'>('overview');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(userProfile.name || '');
+      setAvatarUrl(userProfile.avatarUrl || '');
+      setPreferredMode(userProfile.preferredPaymentMode || 'UPI');
+      setActiveSubTab(userProfile.name ? 'overview' : 'edit');
+      setSavedSuccess(false);
+    }
+  }, [isOpen, userProfile]);
 
   if (!isOpen) return null;
 
@@ -82,8 +92,9 @@ export function ProfileModal({
     // Match by ID or Name
     const userBal = balances.find(
       (b) =>
-        b.member.id === userProfile.id ||
-        b.member.name.trim().toLowerCase() === userProfile.name.trim().toLowerCase()
+        (userProfile.id && b.member.id === userProfile.id) ||
+        (userProfile.name &&
+          b.member.name.trim().toLowerCase() === userProfile.name.trim().toLowerCase())
     );
 
     if (userBal) {
@@ -119,6 +130,7 @@ export function ProfileModal({
 
     const updated: UserProfile = {
       ...userProfile,
+      id: userProfile.id || `user-${Date.now()}`,
       name: name.trim(),
       avatarUrl: avatarUrl.trim(),
       preferredPaymentMode: preferredMode,
@@ -142,7 +154,7 @@ export function ProfileModal({
             <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
               <Sparkles size={16} />
             </div>
-            <h2 className="font-bold text-base text-on-surface">Fairy Profile</h2>
+            <h2 className="font-bold text-base text-on-surface">User Profile</h2>
           </div>
 
           <button
@@ -195,10 +207,12 @@ export function ProfileModal({
             />
 
             <h3 className="text-lg font-bold text-on-surface mt-4 flex items-center gap-1.5">
-              <span>{name || userProfile.name}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-medium">
-                You
-              </span>
+              <span>{name || userProfile.name || 'Set Your Name'}</span>
+              {(name || userProfile.name) && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-medium">
+                  You
+                </span>
+              )}
             </h3>
 
             <span className="text-xs text-on-surface-variant mt-0.5">
@@ -270,40 +284,46 @@ export function ProfileModal({
                   </span>
                 </div>
 
-                <div className="space-y-2">
-                  {tripBreakdowns.map((tb) => (
-                    <div
-                      key={tb.id}
-                      className="rounded-xl p-3 bg-surface-container-lowest/70 border border-white/5 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-lg">{tb.emoji}</span>
-                        <div>
-                          <h4 className="text-xs font-bold text-on-surface">{tb.name}</h4>
-                          <span className="text-[10px] text-on-surface-variant">
-                            {tb.inTrip ? 'Active Member' : 'Not in group'}
-                          </span>
+                {tripBreakdowns.length === 0 ? (
+                  <div className="rounded-xl p-4 bg-surface-container-lowest/50 border border-white/5 text-center text-xs text-on-surface-variant">
+                    No active trips found. Create or join a trip to see balances.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {tripBreakdowns.map((tb) => (
+                      <div
+                        key={tb.id}
+                        className="rounded-xl p-3 bg-surface-container-lowest/70 border border-white/5 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-lg">{tb.emoji}</span>
+                          <div>
+                            <h4 className="text-xs font-bold text-on-surface">{tb.name}</h4>
+                            <span className="text-[10px] text-on-surface-variant">
+                              {tb.inTrip ? 'Active Member' : 'Not in group'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          {tb.netBalance > 0 ? (
+                            <span className="text-xs font-extrabold text-tertiary-fixed-dim">
+                              +₹{formatINR(tb.netBalance)}
+                            </span>
+                          ) : tb.netBalance < 0 ? (
+                            <span className="text-xs font-extrabold text-primary">
+                              -₹{formatINR(Math.abs(tb.netBalance))}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold text-on-surface-variant">
+                              Settled ₹0
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      <div className="text-right">
-                        {tb.netBalance > 0 ? (
-                          <span className="text-xs font-extrabold text-tertiary-fixed-dim">
-                            +₹{formatINR(tb.netBalance)}
-                          </span>
-                        ) : tb.netBalance < 0 ? (
-                          <span className="text-xs font-extrabold text-primary">
-                            -₹{formatINR(Math.abs(tb.netBalance))}
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold text-on-surface-variant">
-                            Settled ₹0
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

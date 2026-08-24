@@ -12,7 +12,7 @@ interface FairyAvatarProps {
 }
 
 export function FairyAvatar({
-  name = 'User',
+  name = '',
   avatarUrl,
   size = 'md',
   showWings = true,
@@ -54,7 +54,7 @@ export function FairyAvatar({
   };
 
   const currentSize = sizeMap[size] || sizeMap.md;
-  const initial = (name || 'U').charAt(0).toUpperCase();
+  const initial = name && name.trim() ? name.trim().charAt(0).toUpperCase() : '✨';
 
   return (
     <div
@@ -174,7 +174,7 @@ export function FairyAvatar({
           {avatarUrl && !imgError ? (
             <img
               src={avatarUrl}
-              alt={name}
+              alt={name || 'Avatar'}
               onError={() => setImgError(true)}
               className="w-full h-full object-cover rounded-full"
             />

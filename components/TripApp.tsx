@@ -65,18 +65,21 @@ export function TripApp({ initialTripId }: TripAppProps) {
               .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
               .join(' ');
 
+            const creatorId = storedProfile?.id || `member-${Date.now()}-1`;
+            const creatorName = storedProfile?.name || 'Member 1';
+
             const dynamicTrip: Trip = {
               id: initialTripId,
               name: formattedName || 'New Trip',
               emoji: '✨',
               members: [
                 {
-                  id: storedProfile?.id || 'member-priya',
-                  name: storedProfile?.name || 'You',
+                  id: creatorId,
+                  name: creatorName,
                   avatarColor: '#f472b6',
                   avatarUrl: storedProfile?.avatarUrl,
                 },
-                { id: `member-${Date.now()}-1`, name: 'Friend 1', avatarColor: '#ddb8ff' },
+                { id: `member-${Date.now()}-2`, name: 'Member 2', avatarColor: '#ddb8ff' },
               ],
               expenses: [],
               settlements: [],
@@ -118,21 +121,26 @@ export function TripApp({ initialTripId }: TripAppProps) {
     persistUserProfile(updatedProfile);
 
     // Synchronize member display name across trips for the user
-    const updatedTrips = trips.map((t) => ({
-      ...t,
-      members: t.members.map((m) => {
-        if (m.id === updatedProfile.id || m.id === 'member-priya' || m.name === userProfile.name) {
-          return {
-            ...m,
-            name: updatedProfile.name,
-            avatarUrl: updatedProfile.avatarUrl,
-          };
-        }
-        return m;
-      }),
-    }));
+    if (updatedProfile.id || updatedProfile.name) {
+      const updatedTrips = trips.map((t) => ({
+        ...t,
+        members: t.members.map((m) => {
+          if (
+            (updatedProfile.id && m.id === updatedProfile.id) ||
+            (userProfile.name && m.name === userProfile.name)
+          ) {
+            return {
+              ...m,
+              name: updatedProfile.name,
+              avatarUrl: updatedProfile.avatarUrl,
+            };
+          }
+          return m;
+        }),
+      }));
 
-    saveTrips(updatedTrips);
+      saveTrips(updatedTrips);
+    }
   };
 
   // Switch trip and update URL
@@ -141,8 +149,19 @@ export function TripApp({ initialTripId }: TripAppProps) {
     router.push(`/trip/${tripId}`);
   };
 
-  // Create new trip
-  const handleCreateTrip = (newTrip: Trip) => {
+  // Create new trip (and optionally record creator name into user profile)
+  const handleCreateTrip = (newTrip: Trip, creatorName?: string) => {
+    if (creatorName && (!userProfile.name || userProfile.name !== creatorName)) {
+      const creatorMember = newTrip.members[0];
+      const updatedProf: UserProfile = {
+        ...userProfile,
+        id: creatorMember?.id || userProfile.id || `user-${Date.now()}`,
+        name: creatorName,
+      };
+      setUserProfile(updatedProf);
+      persistUserProfile(updatedProf);
+    }
+
     const updated = [newTrip, ...trips.filter((t) => t.id !== newTrip.id)];
     saveTrips(updated);
     setActiveTripId(newTrip.id);
@@ -406,7 +425,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
           isOpen={isCreateTripOpen}
           onClose={() => setIsCreateTripOpen(false)}
           onCreateTrip={handleCreateTrip}
-          currentUser={{ id: userProfile.id, name: userProfile.name }}
+          currentUser={userProfile.name ? { id: userProfile.id, name: userProfile.name } : undefined}
         />
 
         {/* Profile Modal / Drawer */}

@@ -29,11 +29,13 @@ export function CreateTripModal({
   isOpen,
   onClose,
   onCreateTrip,
-  currentUser = { id: 'member-me', name: 'You' },
+  currentUser,
 }: CreateTripModalProps) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('🌴');
-  const [memberNames, setMemberNames] = useState<string[]>([currentUser.name || 'You']);
+  const [memberNames, setMemberNames] = useState<string[]>(
+    currentUser?.name ? [currentUser.name] : []
+  );
   const [newMemberInput, setNewMemberInput] = useState('');
   const [error, setError] = useState('');
 
@@ -42,11 +44,11 @@ export function CreateTripModal({
     if (isOpen) {
       setName('');
       setEmoji('🌴');
-      setMemberNames([currentUser.name || 'You']);
+      setMemberNames(currentUser?.name ? [currentUser.name] : []);
       setNewMemberInput('');
       setError('');
     }
-  }, [isOpen, currentUser.name]);
+  }, [isOpen, currentUser?.name]);
 
   if (!isOpen) return null;
 
@@ -98,9 +100,9 @@ export function CreateTripModal({
       .replace(/[^a-z0-9]+/g, '-');
 
     const formattedMembers: Member[] = memberNames.map((memName, idx) => {
-      const isCurrent = idx === 0 && memName.toLowerCase() === (currentUser.name || 'you').toLowerCase();
+      const isCurrent = currentUser?.name && memName.toLowerCase() === currentUser.name.toLowerCase();
       return {
-        id: isCurrent ? currentUser.id || `member-${idx}` : `member-${Date.now()}-${idx}`,
+        id: isCurrent ? currentUser?.id || `member-${idx}` : `member-${Date.now()}-${idx}`,
         name: memName,
         avatarColor: MEMBER_COLORS[idx % MEMBER_COLORS.length],
       };
@@ -153,7 +155,7 @@ export function CreateTripModal({
             <input
               type="text"
               required
-              placeholder="e.g. Manali Weekend, Gokarna Beach, Goa Trip"
+              placeholder="e.g. Vacation, Weekend Roadtrip, Dinner"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-surface-container-lowest/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/50 placeholder-on-surface/40"
@@ -190,7 +192,7 @@ export function CreateTripModal({
                 <Users size={14} className="text-secondary" />
                 <span>Trip Members ({memberNames.length})</span>
               </label>
-              <span className="text-[10px] text-on-surface-variant">Add all friends splitting</span>
+              <span className="text-[10px] text-on-surface-variant">Add friends splitting</span>
             </div>
 
             {/* Input to add friend */}
@@ -198,7 +200,7 @@ export function CreateTripModal({
               <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="Enter friend's name (e.g. Aarav, Sam)..."
+                  placeholder="Add member name..."
                   value={newMemberInput}
                   onChange={(e) => setNewMemberInput(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -208,7 +210,7 @@ export function CreateTripModal({
               <button
                 type="button"
                 onClick={handleAddMember}
-                className="px-3.5 py-2 rounded-xl bg-secondary/20 hover:bg-secondary/30 text-secondary-fixed-dim text-xs font-bold border border-secondary/30 active:scale-95 transition-all flex items-center gap-1 shrink-0"
+                className="px-3.5 py-2 rounded-xl bg-secondary/20 hover:bg-secondary/30 text-secondary-fixed-dim text-xs font-bold border border-secondary/30 active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
               >
                 <UserPlus size={14} />
                 <span>Add</span>
@@ -216,37 +218,43 @@ export function CreateTripModal({
             </div>
 
             {/* Chips Container */}
-            <div className="flex flex-wrap gap-2 pt-1 min-h-[48px] p-2 rounded-xl bg-surface-container-lowest/50 border border-white/5">
-              {memberNames.map((memName, idx) => (
-                <div
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container border border-white/10 shadow-sm animate-in fade-in zoom-in-95 duration-150"
-                >
+            <div className="flex flex-wrap gap-2 pt-1 min-h-[48px] p-2 rounded-xl bg-surface-container-lowest/50 border border-white/5 items-center">
+              {memberNames.length === 0 ? (
+                <span className="text-xs text-on-surface-variant/60 px-1">
+                  No members added yet. Type a name above to add.
+                </span>
+              ) : (
+                memberNames.map((memName, idx) => (
                   <div
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-black"
-                    style={{ backgroundColor: MEMBER_COLORS[idx % MEMBER_COLORS.length] }}
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container border border-white/10 shadow-sm animate-in fade-in zoom-in-95 duration-150"
                   >
-                    {memName.charAt(0).toUpperCase()}
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-black"
+                      style={{ backgroundColor: MEMBER_COLORS[idx % MEMBER_COLORS.length] }}
+                    >
+                      {memName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-medium text-on-surface">
+                      {memName} {currentUser?.name && memName.toLowerCase() === currentUser.name.toLowerCase() ? '(You)' : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMember(idx)}
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-white/10 transition-colors ml-0.5"
+                      title="Remove member"
+                    >
+                      <X size={11} />
+                    </button>
                   </div>
-                  <span className="text-xs font-medium text-on-surface">
-                    {memName} {idx === 0 ? '(You)' : ''}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMember(idx)}
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-white/10 transition-colors ml-0.5"
-                    title="Remove member"
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full mt-3 py-3 rounded-full bg-primary text-on-primary font-bold text-sm shadow-[0_0_20px_rgba(244,114,182,0.3)] active:scale-[0.98] transition-transform flex items-center justify-center gap-1.5"
+            className="w-full mt-3 py-3 rounded-full bg-primary text-on-primary font-bold text-sm shadow-[0_0_20px_rgba(244,114,182,0.3)] active:scale-[0.98] transition-transform flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Plus size={16} />
             <span>Launch Event</span>
