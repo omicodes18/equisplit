@@ -1,11 +1,10 @@
 import React from 'react';
 import { TripApp } from '@/components/TripApp';
-import { INITIAL_TRIPS } from '@/lib/initialData';
+
+export const dynamicParams = true;
 
 export function generateStaticParams() {
-  return INITIAL_TRIPS.map((trip) => ({
-    tripId: trip.id,
-  }));
+  return [];
 }
 
 interface TripPageProps {

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trip, Member, Expense, Settlement, MemberBalance, UserProfile } from '@/lib/types';
+import { Trip, Expense, Settlement, MemberBalance, UserProfile } from '@/lib/types';
 import { INITIAL_TRIPS } from '@/lib/initialData';
 import { calculateBalances, formatINR } from '@/lib/utils';
 import {
@@ -21,6 +21,7 @@ import { SettleUpView } from '@/components/SettleUpView';
 import { CreateTripModal } from '@/components/CreateTripModal';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
+import { FirstTripView } from '@/components/FirstTripView';
 import { SyncStatusPill } from '@/components/SyncStatusPill';
 import { Plus } from 'lucide-react';
 
@@ -31,11 +32,10 @@ interface TripAppProps {
 export function TripApp({ initialTripId }: TripAppProps) {
   const router = useRouter();
   const [trips, setTrips] = useState<Trip[]>(INITIAL_TRIPS);
-  const [activeTripId, setActiveTripId] = useState<string>(
-    initialTripId || INITIAL_TRIPS[0].id
-  );
+  const [activeTripId, setActiveTripId] = useState<string>(initialTripId || '');
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Modals state
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -71,13 +71,12 @@ export function TripApp({ initialTripId }: TripAppProps) {
               emoji: '✨',
               members: [
                 {
-                  id: storedProfile.id || 'member-priya',
-                  name: storedProfile.name || 'Priya',
+                  id: storedProfile?.id || 'member-priya',
+                  name: storedProfile?.name || 'You',
                   avatarColor: '#f472b6',
-                  avatarUrl: storedProfile.avatarUrl,
+                  avatarUrl: storedProfile?.avatarUrl,
                 },
-                { id: 'member-friend-1', name: 'Alex', avatarColor: '#ddb8ff' },
-                { id: 'member-friend-2', name: 'Sam', avatarColor: '#f9bd22' },
+                { id: `member-${Date.now()}-1`, name: 'Friend 1', avatarColor: '#ddb8ff' },
               ],
               expenses: [],
               settlements: [],
@@ -93,9 +92,14 @@ export function TripApp({ initialTripId }: TripAppProps) {
           } else {
             setActiveTripId(currentTrips[0].id);
           }
+        } else {
+          setTrips([]);
+          setActiveTripId('');
         }
       } catch (e) {
         console.error('Storage initialization error:', e);
+      } finally {
+        setIsLoaded(true);
       }
     }
 
@@ -117,7 +121,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
     const updatedTrips = trips.map((t) => ({
       ...t,
       members: t.members.map((m) => {
-        if (m.id === updatedProfile.id || m.id === 'member-priya') {
+        if (m.id === updatedProfile.id || m.id === 'member-priya' || m.name === userProfile.name) {
           return {
             ...m,
             name: updatedProfile.name,
@@ -131,20 +135,6 @@ export function TripApp({ initialTripId }: TripAppProps) {
     saveTrips(updatedTrips);
   };
 
-  // Find active trip or fallback
-  const activeTrip =
-    trips.find((t) => t.id === activeTripId) ||
-    trips[0] ||
-    INITIAL_TRIPS[0];
-
-  const members = activeTrip.members;
-  const expenses = activeTrip.expenses;
-  const settlements = activeTrip.settlements || [];
-
-  // Live balance calculation
-  const balances: MemberBalance[] = calculateBalances(members, expenses, settlements);
-  const totalGroupSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
-
   // Switch trip and update URL
   const handleSelectTrip = (tripId: string) => {
     setActiveTripId(tripId);
@@ -153,15 +143,34 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Create new trip
   const handleCreateTrip = (newTrip: Trip) => {
-    const updated = [newTrip, ...trips];
+    const updated = [newTrip, ...trips.filter((t) => t.id !== newTrip.id)];
     saveTrips(updated);
     setActiveTripId(newTrip.id);
     setActiveTab('dashboard');
     router.push(`/trip/${newTrip.id}`);
   };
 
+  // Delete Trip
+  const handleDeleteTrip = (tripIdToDelete: string) => {
+    const updated = trips.filter((t) => t.id !== tripIdToDelete);
+    saveTrips(updated);
+
+    if (activeTripId === tripIdToDelete) {
+      if (updated.length > 0) {
+        setActiveTripId(updated[0].id);
+        router.push(`/trip/${updated[0].id}`);
+      } else {
+        setActiveTripId('');
+        router.push('/');
+      }
+    }
+  };
+
   // Add Expense
   const handleAddExpense = (newExpData: Omit<Expense, 'id'>) => {
+    const activeTrip = trips.find((t) => t.id === activeTripId);
+    if (!activeTrip) return;
+
     const newExpense: Expense = {
       ...newExpData,
       id: `exp-${Date.now()}`,
@@ -182,6 +191,9 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Delete Expense
   const handleDeleteExpense = (expenseId: string) => {
+    const activeTrip = trips.find((t) => t.id === activeTripId);
+    if (!activeTrip) return;
+
     const updated = trips.map((t) => {
       if (t.id === activeTrip.id) {
         return {
@@ -197,6 +209,9 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Settle Debt
   const handleConfirmSettlement = (settlementData: Omit<Settlement, 'id'>) => {
+    const activeTrip = trips.find((t) => t.id === activeTripId);
+    if (!activeTrip) return;
+
     const newSettlement: Settlement = {
       ...settlementData,
       id: `settle-${Date.now()}`,
@@ -215,17 +230,63 @@ export function TripApp({ initialTripId }: TripAppProps) {
     saveTrips(updated);
   };
 
+  // Find active trip
+  const activeTrip = trips.find((t) => t.id === activeTripId) || trips[0];
+
+  // If no trips exist, render the clean "Create Your First Trip" onboarding screen!
+  if (isLoaded && (!activeTrip || trips.length === 0)) {
+    return (
+      <>
+        <FirstTripView
+          userProfile={userProfile}
+          onCreateTrip={handleCreateTrip}
+          onOpenProfile={() => setIsProfileOpen(true)}
+        />
+
+        {/* Profile Modal */}
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          userProfile={userProfile}
+          onSaveProfile={handleSaveProfile}
+          trips={trips}
+        />
+      </>
+    );
+  }
+
+  // Fallback while loading
+  if (!activeTrip) {
+    return (
+      <div className="min-h-screen bg-[#091E15] flex items-center justify-center text-primary font-bold">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant">Loading Nocturne...</span>
+        </div>
+      </div>
+    );
+  }
+
+  const members = activeTrip.members || [];
+  const expenses = activeTrip.expenses || [];
+  const settlements = activeTrip.settlements || [];
+
+  // Live balance calculation
+  const balances: MemberBalance[] = calculateBalances(members, expenses, settlements);
+  const totalGroupSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
+
   return (
     <div className="min-h-screen bg-[#091E15] text-[#d0e8d9] flex justify-center selection:bg-primary/30 selection:text-primary">
-      {/* Mobile-First Constrained Wrapper (max-w-md on desktop, full-width on mobile) */}
+      {/* Mobile-First Constrained Wrapper */}
       <div className="w-full max-w-md min-h-screen flex flex-col relative bg-[#03170e] shadow-2xl border-x border-white/5 pb-24">
-        {/* Sticky Top Header with Switcher, Invite & Profile */}
+        {/* Sticky Top Header with Switcher, Delete Trip, Invite & Profile */}
         <Header
           trips={trips}
           activeTrip={activeTrip}
           userProfile={userProfile}
           onSelectTrip={handleSelectTrip}
           onCreateNewTrip={() => setIsCreateTripOpen(true)}
+          onDeleteTrip={handleDeleteTrip}
           onOpenProfile={() => setIsProfileOpen(true)}
           onOpenInvite={() => setIsInviteOpen(true)}
         />
@@ -322,7 +383,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
         <button
           type="button"
           onClick={() => setIsAddExpenseOpen(true)}
-          className="fixed bottom-20 right-4 sm:right-auto sm:left-[calc(50%+140px)] w-14 h-14 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 hover:scale-105 transition-transform z-30 border border-white/10"
+          className="fixed bottom-20 right-4 sm:right-auto sm:left-[calc(50%+140px)] w-14 h-14 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 hover:scale-105 transition-transform z-30 border border-white/10 cursor-pointer"
           aria-label="Add Expense"
         >
           <Plus size={28} className="stroke-[2.5]" />
@@ -345,7 +406,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
           isOpen={isCreateTripOpen}
           onClose={() => setIsCreateTripOpen(false)}
           onCreateTrip={handleCreateTrip}
-          defaultMembers={members}
+          currentUser={{ id: userProfile.id, name: userProfile.name }}
         />
 
         {/* Profile Modal / Drawer */}
