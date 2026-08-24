@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trip, Expense, Settlement, MemberBalance, UserProfile } from '@/lib/types';
+import { Trip, Member, Expense, Settlement, MemberBalance, UserProfile } from '@/lib/types';
 import { INITIAL_TRIPS } from '@/lib/initialData';
 import { calculateBalances, formatINR } from '@/lib/utils';
 import {
@@ -21,6 +21,7 @@ import { SettleUpView } from '@/components/SettleUpView';
 import { CreateTripModal } from '@/components/CreateTripModal';
 import { ProfileModal } from '@/components/ProfileModal';
 import { InviteModal } from '@/components/InviteModal';
+import { JoinTripModal } from '@/components/JoinTripModal';
 import { FirstTripView } from '@/components/FirstTripView';
 import { SyncStatusPill } from '@/components/SyncStatusPill';
 import { Plus } from 'lucide-react';
@@ -28,6 +29,17 @@ import { Plus } from 'lucide-react';
 interface TripAppProps {
   initialTripId?: string;
 }
+
+const MEMBER_COLORS = [
+  '#f472b6',
+  '#ddb8ff',
+  '#f9bd22',
+  '#62259b',
+  '#34d399',
+  '#60a5fa',
+  '#ca9700',
+  '#f87171',
+];
 
 export function TripApp({ initialTripId }: TripAppProps) {
   const router = useRouter();
@@ -57,30 +69,19 @@ export function TripApp({ initialTripId }: TripAppProps) {
         }
 
         if (storedTrips && storedTrips.length > 0) {
-          // If initialTripId is specified and not present in stored trips, create it dynamically
           let currentTrips = storedTrips;
+          // If user visits /trip/[tripId] and it's not yet in their local storage, instantiate the room
           if (initialTripId && !storedTrips.some((t) => t.id === initialTripId)) {
             const formattedName = initialTripId
               .split('-')
               .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
               .join(' ');
 
-            const creatorId = storedProfile?.id || `member-${Date.now()}-1`;
-            const creatorName = storedProfile?.name || 'Member 1';
-
             const dynamicTrip: Trip = {
               id: initialTripId,
-              name: formattedName || 'New Trip',
+              name: formattedName || 'Trip Room',
               emoji: '✨',
-              members: [
-                {
-                  id: creatorId,
-                  name: creatorName,
-                  avatarColor: '#f472b6',
-                  avatarUrl: storedProfile?.avatarUrl,
-                },
-                { id: `member-${Date.now()}-2`, name: 'Member 2', avatarColor: '#ddb8ff' },
-              ],
+              members: [],
               expenses: [],
               settlements: [],
             };
@@ -95,6 +96,24 @@ export function TripApp({ initialTripId }: TripAppProps) {
           } else {
             setActiveTripId(currentTrips[0].id);
           }
+        } else if (initialTripId) {
+          // No stored trips, but user opened a specific /trip/[tripId] link
+          const formattedName = initialTripId
+            .split('-')
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          const dynamicTrip: Trip = {
+            id: initialTripId,
+            name: formattedName || 'Trip Room',
+            emoji: '✨',
+            members: [],
+            expenses: [],
+            settlements: [],
+          };
+          setTrips([dynamicTrip]);
+          setActiveTripId(initialTripId);
+          await persistTripsToStorage([dynamicTrip]);
         } else {
           setTrips([]);
           setActiveTripId('');
@@ -127,7 +146,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
         members: t.members.map((m) => {
           if (
             (updatedProfile.id && m.id === updatedProfile.id) ||
-            (userProfile.name && m.name === userProfile.name)
+            (userProfile.name && m.name.toLowerCase() === userProfile.name.toLowerCase())
           ) {
             return {
               ...m,
@@ -149,7 +168,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
     router.push(`/trip/${tripId}`);
   };
 
-  // Create new trip (and optionally record creator name into user profile)
+  // Create new trip
   const handleCreateTrip = (newTrip: Trip, creatorName?: string) => {
     if (creatorName && (!userProfile.name || userProfile.name !== creatorName)) {
       const creatorMember = newTrip.members[0];
@@ -167,6 +186,40 @@ export function TripApp({ initialTripId }: TripAppProps) {
     setActiveTripId(newTrip.id);
     setActiveTab('dashboard');
     router.push(`/trip/${newTrip.id}`);
+  };
+
+  // Friend joins active trip
+  const handleJoinTrip = (memberName: string) => {
+    const activeTrip = trips.find((t) => t.id === activeTripId);
+    if (!activeTrip) return;
+
+    const newMemberId = userProfile.id || `member-${Date.now()}`;
+    const newMember: Member = {
+      id: newMemberId,
+      name: memberName,
+      avatarColor: MEMBER_COLORS[activeTrip.members.length % MEMBER_COLORS.length],
+      avatarUrl: userProfile.avatarUrl,
+    };
+
+    const updatedProf: UserProfile = {
+      ...userProfile,
+      id: newMemberId,
+      name: memberName,
+    };
+    setUserProfile(updatedProf);
+    persistUserProfile(updatedProf);
+
+    const updatedTrips = trips.map((t) => {
+      if (t.id === activeTrip.id) {
+        return {
+          ...t,
+          members: [...t.members, newMember],
+        };
+      }
+      return t;
+    });
+
+    saveTrips(updatedTrips);
   };
 
   // Delete Trip
@@ -252,7 +305,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
   // Find active trip
   const activeTrip = trips.find((t) => t.id === activeTripId) || trips[0];
 
-  // If no trips exist, render the clean "Create Your First Trip" onboarding screen!
+  // If no trips exist, render the clean "Create Your Trip Room" onboarding screen!
   if (isLoaded && (!activeTrip || trips.length === 0)) {
     return (
       <>
@@ -280,7 +333,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
       <div className="min-h-screen bg-[#091E15] flex items-center justify-center text-primary font-bold">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <span className="text-xs uppercase tracking-widest text-on-surface-variant">Loading Nocturne...</span>
+          <span className="text-xs uppercase tracking-widest text-on-surface-variant">Loading Room...</span>
         </div>
       </div>
     );
@@ -290,9 +343,23 @@ export function TripApp({ initialTripId }: TripAppProps) {
   const expenses = activeTrip.expenses || [];
   const settlements = activeTrip.settlements || [];
 
+  // Check if current user is already an identified member in this trip
+  const isUserMemberOfTrip = members.some(
+    (m) =>
+      (userProfile.id && m.id === userProfile.id) ||
+      (userProfile.name && m.name.toLowerCase() === userProfile.name.toLowerCase())
+  );
+
   // Live balance calculation
   const balances: MemberBalance[] = calculateBalances(members, expenses, settlements);
   const totalGroupSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+  // Find current user's member ID in active trip
+  const currentUserMember = members.find(
+    (m) =>
+      (userProfile.id && m.id === userProfile.id) ||
+      (userProfile.name && m.name.toLowerCase() === userProfile.name.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-[#091E15] text-[#d0e8d9] flex justify-center selection:bg-primary/30 selection:text-primary">
@@ -344,7 +411,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
                   <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container/20 border border-secondary-fixed/20 backdrop-blur-md">
                     <span className="w-1.5 h-1.5 rounded-full bg-secondary-fixed-dim animate-pulse" />
                     <span className="text-xs text-secondary-fixed-dim font-medium">
-                      {members.length} members • {expenses.length} bills
+                      {members.length} member{members.length === 1 ? '' : 's'} • {expenses.length} bill{expenses.length === 1 ? '' : 's'}
                     </span>
                   </div>
                 </div>
@@ -417,6 +484,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
           onClose={() => setIsAddExpenseOpen(false)}
           members={members}
           onAddExpense={handleAddExpense}
+          defaultPayerId={currentUserMember?.id}
           defaultPaymentMode={userProfile.preferredPaymentMode}
         />
 
@@ -442,6 +510,13 @@ export function TripApp({ initialTripId }: TripAppProps) {
           isOpen={isInviteOpen}
           onClose={() => setIsInviteOpen(false)}
           trip={activeTrip}
+        />
+
+        {/* Frictionless Friend Join Modal when opening via invite/QR without an identity in this trip */}
+        <JoinTripModal
+          isOpen={isLoaded && !isUserMemberOfTrip}
+          trip={activeTrip}
+          onJoin={handleJoinTrip}
         />
       </div>
     </div>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Trip, Member, UserProfile } from '@/lib/types';
 import { triggerConfetti } from '@/lib/utils';
-import { Plus, Users, UserPlus, X, Compass, ShieldCheck, User } from 'lucide-react';
+import { Sparkles, Compass, ShieldCheck, User } from 'lucide-react';
 import { FairyAvatar } from './FairyAvatar';
 
 interface FirstTripViewProps {
@@ -31,38 +31,9 @@ export function FirstTripView({
   onOpenProfile,
 }: FirstTripViewProps) {
   const [tripName, setTripName] = useState('');
-  const [yourName, setYourName] = useState(userProfile.name || '');
+  const [hostName, setHostName] = useState(userProfile.name || '');
   const [emoji, setEmoji] = useState('🌴');
-  const [friendNames, setFriendNames] = useState<string[]>([]);
-  const [newFriendInput, setNewFriendInput] = useState('');
   const [error, setError] = useState('');
-
-  const handleAddFriend = () => {
-    const trimmed = newFriendInput.trim();
-    if (!trimmed) return;
-    if (
-      (yourName && yourName.toLowerCase() === trimmed.toLowerCase()) ||
-      friendNames.some((m) => m.toLowerCase() === trimmed.toLowerCase())
-    ) {
-      setError(`"${trimmed}" is already added.`);
-      return;
-    }
-    setFriendNames([...friendNames, trimmed]);
-    setNewFriendInput('');
-    setError('');
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddFriend();
-    }
-  };
-
-  const handleRemoveFriend = (idxToRemove: number) => {
-    setFriendNames(friendNames.filter((_, idx) => idx !== idxToRemove));
-    setError('');
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,15 +44,8 @@ export function FirstTripView({
       return;
     }
 
-    if (!yourName.trim()) {
-      setError('Please enter your name.');
-      return;
-    }
-
-    const allMembersList: string[] = [yourName.trim(), ...friendNames];
-
-    if (allMembersList.length === 0) {
-      setError('Please add at least one member.');
+    if (!hostName.trim()) {
+      setError('Please enter your name as the host.');
       return;
     }
 
@@ -90,29 +54,25 @@ export function FirstTripView({
       .trim()
       .replace(/[^a-z0-9]+/g, '-');
 
-    const formattedMembers: Member[] = allMembersList.map((memName, idx) => {
-      const isCreator = idx === 0;
-      return {
-        id: isCreator
-          ? userProfile.id || `member-${Date.now()}-0`
-          : `member-${Date.now()}-${idx}`,
-        name: memName,
-        avatarColor: MEMBER_COLORS[idx % MEMBER_COLORS.length],
-        avatarUrl: isCreator ? userProfile.avatarUrl : undefined,
-      };
-    });
+    const hostId = userProfile.id || `member-${Date.now()}`;
+    const hostMember: Member = {
+      id: hostId,
+      name: hostName.trim(),
+      avatarColor: MEMBER_COLORS[0],
+      avatarUrl: userProfile.avatarUrl,
+    };
 
     const newTrip: Trip = {
       id: `${slug || 'trip'}-${Date.now().toString().slice(-4)}`,
       name: tripName.trim(),
       emoji,
-      members: formattedMembers,
+      members: [hostMember],
       expenses: [],
       settlements: [],
     };
 
     triggerConfetti();
-    onCreateTrip(newTrip, yourName.trim());
+    onCreateTrip(newTrip, hostName.trim());
   };
 
   return (
@@ -128,7 +88,7 @@ export function FirstTripView({
               <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
                 Nocturne Ledger
               </span>
-              <span className="font-semibold text-sm text-on-surface">Welcome</span>
+              <span className="font-semibold text-sm text-on-surface">Start a Room</span>
             </div>
           </div>
 
@@ -136,10 +96,10 @@ export function FirstTripView({
             type="button"
             onClick={onOpenProfile}
             title={userProfile.name ? `Profile: ${userProfile.name}` : 'Profile'}
-            className="focus:outline-none active:scale-95 transition-transform"
+            className="focus:outline-none active:scale-95 transition-transform cursor-pointer"
           >
             <FairyAvatar
-              name={yourName || userProfile.name}
+              name={hostName || userProfile.name}
               avatarUrl={userProfile.avatarUrl}
               size="sm"
               showWings={true}
@@ -157,10 +117,10 @@ export function FirstTripView({
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-on-background tracking-tight">
-              Create Your First Trip
+              Create Your Trip Room
             </h1>
             <p className="text-xs sm:text-sm text-on-surface-variant mt-1.5 max-w-xs mx-auto">
-              Split expenses with friends frictionlessly. Zero signup required.
+              Launch a room instantly. Friends can scan the QR code to add their own names & split bills!
             </p>
           </div>
 
@@ -191,10 +151,10 @@ export function FirstTripView({
               />
             </div>
 
-            {/* Your Name */}
+            {/* Host Name */}
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-wider font-semibold text-on-surface-variant pl-1 block">
-                Your Name
+                Host Name (Your Name)
               </label>
               <div className="relative flex items-center px-3.5 py-2.5 rounded-xl bg-surface-container-lowest/90 border border-white/10 focus-within:border-primary/50 transition-colors">
                 <User size={16} className="text-on-surface-variant mr-2 shrink-0" />
@@ -202,8 +162,8 @@ export function FirstTripView({
                   type="text"
                   required
                   placeholder="Enter your name"
-                  value={yourName}
-                  onChange={(e) => setYourName(e.target.value)}
+                  value={hostName}
+                  onChange={(e) => setHostName(e.target.value)}
                   className="w-full bg-transparent text-sm text-on-surface focus:outline-none placeholder-on-surface/40"
                 />
               </div>
@@ -220,7 +180,7 @@ export function FirstTripView({
                     key={em}
                     type="button"
                     onClick={() => setEmoji(em)}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl transition-all shrink-0 ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl transition-all shrink-0 cursor-pointer ${
                       emoji === em
                         ? 'bg-primary text-on-primary shadow-md scale-110'
                         : 'bg-surface-container-lowest hover:bg-surface-container border border-white/5'
@@ -232,91 +192,12 @@ export function FirstTripView({
               </div>
             </div>
 
-            {/* Members Tags/Chips Section */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between px-1">
-                <label className="text-xs uppercase tracking-wider font-semibold text-on-surface-variant flex items-center gap-1.5">
-                  <Users size={14} className="text-secondary" />
-                  <span>Trip Members ({(yourName ? 1 : 0) + friendNames.length})</span>
-                </label>
-                <span className="text-[11px] text-tertiary-fixed-dim font-medium">
-                  Add friends
-                </span>
-              </div>
-
-              {/* Add friend input */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Add friend name..."
-                  value={newFriendInput}
-                  onChange={(e) => setNewFriendInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="flex-1 bg-surface-container-lowest/90 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-on-surface focus:outline-none focus:border-primary/50 placeholder-on-surface/40"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddFriend}
-                  className="px-4 py-2.5 rounded-xl bg-secondary/20 hover:bg-secondary/30 text-secondary-fixed-dim text-xs font-bold border border-secondary/30 active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
-                >
-                  <UserPlus size={14} />
-                  <span>Add</span>
-                </button>
-              </div>
-
-              {/* Member Chips list */}
-              <div className="flex flex-wrap gap-2 p-2.5 rounded-2xl bg-surface-container-lowest/60 border border-white/5 min-h-[54px] items-center">
-                {/* Creator Chip */}
-                {yourName ? (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container border border-primary/30 shadow-sm animate-in fade-in">
-                    <div
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-black"
-                      style={{ backgroundColor: MEMBER_COLORS[0] }}
-                    >
-                      {yourName.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-semibold text-on-surface">
-                      {yourName} <span className="text-primary text-[10px] font-normal">(You)</span>
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-xs text-on-surface-variant/60 px-1">
-                    Enter your name above to see member list.
-                  </span>
-                )}
-
-                {/* Friend Chips */}
-                {friendNames.map((memName, idx) => (
-                  <div
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container border border-white/10 shadow-sm animate-in fade-in zoom-in-95 duration-150"
-                  >
-                    <div
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-black"
-                      style={{ backgroundColor: MEMBER_COLORS[(idx + 1) % MEMBER_COLORS.length] }}
-                    >
-                      {memName.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-semibold text-on-surface">
-                      {memName}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFriend(idx)}
-                      className="w-4 h-4 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-white/10 transition-colors ml-0.5"
-                      title="Remove friend"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Offline note */}
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-surface-container-lowest/40 border border-white/5 text-[11px] text-on-surface-variant">
-              <ShieldCheck size={14} className="text-primary shrink-0" />
-              <span>Offline-first: Stored securely on your device & shareable via QR code.</span>
+            {/* Frictionless QR Note */}
+            <div className="flex items-center gap-2 p-3 rounded-2xl bg-secondary-container/15 border border-secondary/20 text-xs text-secondary-fixed-dim">
+              <Sparkles size={16} className="text-tertiary shrink-0" />
+              <span>
+                <strong>Zero-Friction:</strong> Friends join with one tap using your room&apos;s QR code.
+              </span>
             </div>
 
             {/* Submit Button */}
@@ -324,8 +205,8 @@ export function FirstTripView({
               type="submit"
               className="w-full py-3.5 rounded-full bg-primary text-on-primary font-bold text-sm shadow-[0_0_20px_rgba(244,114,182,0.35)] active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Plus size={18} />
-              <span>Launch Event</span>
+              <Sparkles size={18} />
+              <span>Launch Trip Room ✨</span>
             </button>
           </form>
         </main>
