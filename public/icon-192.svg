@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="40" fill="#091E15" />
+  <circle cx="96" cy="96" r="60" fill="#03170e" stroke="#F472B6" stroke-width="4" />
+  <path d="M70 96 C60 70, 30 50, 20 65 C10 75, 30 100, 70 98 Z" fill="#F472B6" opacity="0.75" />
+  <path d="M122 96 C132 70, 162 50, 172 65 C182 75, 162 100, 122 98 Z" fill="#C084FC" opacity="0.75" />
+  <ellipse cx="96" cy="62" rx="28" ry="8" fill="none" stroke="#FBBF24" stroke-width="3" />
+  <text x="96" y="112" font-family="system-ui, sans-serif" font-size="44" font-weight="900" fill="#F472B6" text-anchor="middle">₹</text>
+  <text x="135" y="65" font-family="system-ui, sans-serif" font-size="18" fill="#FBBF24">✨</text>
+</svg>

@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #091E15;
+    --surface: #03170e;
+    --foreground: #d0e8d9;
+    --primary: #F472B6;
+    --secondary: #C084FC;
+    --tertiary: #FBBF24;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body {
+    background-color: #091E15;
+    color: #d0e8d9;
+    font-family: var(--font-plus-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  /* Hide scrollbars for clean mobile feel */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Clean glass panel styling matching Stitch design */
+.glass-panel {
+  background: rgba(15, 35, 26, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.active-glow {
+  filter: drop-shadow(0 0 10px rgba(244, 114, 182, 0.4));
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
