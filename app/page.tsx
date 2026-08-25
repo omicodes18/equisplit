@@ -1,6 +1,6 @@
 import React from 'react';
-import { TripApp } from '@/components/TripApp';
+import { MyTripsHub } from '@/components/MyTripsHub';
 
 export default function HomePage() {
-  return <TripApp />;
+  return <MyTripsHub />;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trip, Member, Expense, Settlement, MemberBalance, UserProfile } from '@/lib/types';
 import { INITIAL_TRIPS } from '@/lib/initialData';
@@ -12,6 +12,11 @@ import {
   persistUserProfile,
   DEFAULT_USER_PROFILE,
 } from '@/lib/storage';
+import {
+  syncTripToCloud,
+  fetchTripFromCloud,
+  subscribeToTripUpdates,
+} from '@/lib/cloudSync';
 import { Header } from '@/components/Header';
 import { BottomNav, TabType } from '@/components/BottomNav';
 import { WhoShouldPayNextCard } from '@/components/WhoShouldPayNextCard';
@@ -55,8 +60,15 @@ export function TripApp({ initialTripId }: TripAppProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
 
-  // Load from IndexedDB / localStorage on client mount
+  const tripsRef = useRef<Trip[]>(trips);
   useEffect(() => {
+    tripsRef.current = trips;
+  }, [trips]);
+
+  // Load from IndexedDB / localStorage & Cloud on client mount
+  useEffect(() => {
+    let isCancelled = false;
+
     async function initializeEngine() {
       try {
         const [storedTrips, storedProfile] = await Promise.all([
@@ -64,14 +76,29 @@ export function TripApp({ initialTripId }: TripAppProps) {
           loadUserProfile(),
         ]);
 
+        if (isCancelled) return;
+
         if (storedProfile) {
           setUserProfile(storedProfile);
         }
 
-        if (storedTrips && storedTrips.length > 0) {
-          let currentTrips = storedTrips;
-          // If user visits /trip/[tripId] and it's not yet in their local storage, instantiate the room
-          if (initialTripId && !storedTrips.some((t) => t.id === initialTripId)) {
+        let currentTrips = storedTrips || [];
+
+        // If visiting a specific trip URL
+        if (initialTripId) {
+          // Try fetching latest from cloud first
+          const cloudTrip = await fetchTripFromCloud(initialTripId);
+
+          if (cloudTrip) {
+            // Merge with local trips
+            const existingIdx = currentTrips.findIndex((t) => t.id === initialTripId);
+            if (existingIdx >= 0) {
+              currentTrips[existingIdx] = cloudTrip;
+            } else {
+              currentTrips = [cloudTrip, ...currentTrips];
+            }
+          } else if (!currentTrips.some((t) => t.id === initialTripId)) {
+            // Not in storage and not in cloud yet -> create clean room stub
             const formattedName = initialTripId
               .split('-')
               .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -85,61 +112,85 @@ export function TripApp({ initialTripId }: TripAppProps) {
               expenses: [],
               settlements: [],
             };
-            currentTrips = [dynamicTrip, ...storedTrips];
-            await persistTripsToStorage(currentTrips);
+            currentTrips = [dynamicTrip, ...currentTrips];
+            // Push to cloud
+            syncTripToCloud(dynamicTrip).catch(() => {});
           }
 
-          setTrips(currentTrips);
-
-          if (initialTripId && currentTrips.some((t) => t.id === initialTripId)) {
-            setActiveTripId(initialTripId);
-          } else {
-            setActiveTripId(currentTrips[0].id);
-          }
-        } else if (initialTripId) {
-          // No stored trips, but user opened a specific /trip/[tripId] link
-          const formattedName = initialTripId
-            .split('-')
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
-          const dynamicTrip: Trip = {
-            id: initialTripId,
-            name: formattedName || 'Trip Room',
-            emoji: '✨',
-            members: [],
-            expenses: [],
-            settlements: [],
-          };
-          setTrips([dynamicTrip]);
           setActiveTripId(initialTripId);
-          await persistTripsToStorage([dynamicTrip]);
+        } else if (currentTrips.length > 0) {
+          setActiveTripId(currentTrips[0].id);
         } else {
-          setTrips([]);
           setActiveTripId('');
         }
+
+        setTrips(currentTrips);
+        persistTripsToStorage(currentTrips);
       } catch (e) {
         console.error('Storage initialization error:', e);
       } finally {
-        setIsLoaded(true);
+        if (!isCancelled) setIsLoaded(true);
       }
     }
 
     initializeEngine();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [initialTripId]);
 
-  // Save trips to state & IndexedDB / LocalStorage
-  const saveTrips = (updatedTrips: Trip[]) => {
+  // Real-time Cloud & BroadcastChannel subscription for active trip
+  useEffect(() => {
+    if (!activeTripId) return;
+
+    const unsubscribe = subscribeToTripUpdates(activeTripId, (remoteTrip) => {
+      if (!remoteTrip || remoteTrip.id !== activeTripId) return;
+
+      setTrips((prevTrips) => {
+        const existingIdx = prevTrips.findIndex((t) => t.id === remoteTrip.id);
+        let updated: Trip[];
+        if (existingIdx >= 0) {
+          // Compare if changed to avoid unnecessary re-renders
+          const current = prevTrips[existingIdx];
+          const isSame =
+            JSON.stringify(current.expenses) === JSON.stringify(remoteTrip.expenses) &&
+            JSON.stringify(current.members) === JSON.stringify(remoteTrip.members) &&
+            JSON.stringify(current.settlements) === JSON.stringify(remoteTrip.settlements);
+          if (isSame) return prevTrips;
+
+          updated = [...prevTrips];
+          updated[existingIdx] = remoteTrip;
+        } else {
+          updated = [remoteTrip, ...prevTrips];
+        }
+        persistTripsToStorage(updated);
+        return updated;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeTripId]);
+
+  // Save trips to state & IndexedDB / LocalStorage & Cloud
+  const saveTrips = useCallback((updatedTrips: Trip[], fullOverwrite: boolean = false) => {
     setTrips(updatedTrips);
     persistTripsToStorage(updatedTrips);
-  };
+
+    // Sync active trip to cloud
+    const active = updatedTrips.find((t) => t.id === activeTripId);
+    if (active) {
+      syncTripToCloud(active, fullOverwrite).catch(() => {});
+    }
+  }, [activeTripId]);
 
   // Save user profile to state & storage
   const handleSaveProfile = (updatedProfile: UserProfile) => {
     setUserProfile(updatedProfile);
     persistUserProfile(updatedProfile);
 
-    // Synchronize member display name across trips for the user
     if (updatedProfile.id || updatedProfile.name) {
       const updatedTrips = trips.map((t) => ({
         ...t,
@@ -183,6 +234,8 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
     const updated = [newTrip, ...trips.filter((t) => t.id !== newTrip.id)];
     saveTrips(updated);
+    // Push new trip to cloud
+    syncTripToCloud(newTrip).catch(() => {});
     setActiveTripId(newTrip.id);
     setActiveTab('dashboard');
     router.push(`/trip/${newTrip.id}`);
@@ -190,14 +243,14 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Friend joins active trip
   const handleJoinTrip = (memberName: string) => {
-    const activeTrip = trips.find((t) => t.id === activeTripId);
-    if (!activeTrip) return;
+    const currentActive = trips.find((t) => t.id === activeTripId);
+    if (!currentActive) return;
 
     const newMemberId = userProfile.id || `member-${Date.now()}`;
     const newMember: Member = {
       id: newMemberId,
       name: memberName,
-      avatarColor: MEMBER_COLORS[activeTrip.members.length % MEMBER_COLORS.length],
+      avatarColor: MEMBER_COLORS[currentActive.members.length % MEMBER_COLORS.length],
       avatarUrl: userProfile.avatarUrl,
     };
 
@@ -210,7 +263,10 @@ export function TripApp({ initialTripId }: TripAppProps) {
     persistUserProfile(updatedProf);
 
     const updatedTrips = trips.map((t) => {
-      if (t.id === activeTrip.id) {
+      if (t.id === currentActive.id) {
+        // Prevent duplicate addition
+        const exists = t.members.some((m) => m.name.toLowerCase() === memberName.toLowerCase());
+        if (exists) return t;
         return {
           ...t,
           members: [...t.members, newMember],
@@ -227,6 +283,11 @@ export function TripApp({ initialTripId }: TripAppProps) {
     const updated = trips.filter((t) => t.id !== tripIdToDelete);
     saveTrips(updated);
 
+    // Delete in cloud API
+    try {
+      fetch(`/api/trips/${encodeURIComponent(tripIdToDelete)}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
     if (activeTripId === tripIdToDelete) {
       if (updated.length > 0) {
         setActiveTripId(updated[0].id);
@@ -240,8 +301,8 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Add Expense
   const handleAddExpense = (newExpData: Omit<Expense, 'id'>) => {
-    const activeTrip = trips.find((t) => t.id === activeTripId);
-    if (!activeTrip) return;
+    const currentActive = trips.find((t) => t.id === activeTripId);
+    if (!currentActive) return;
 
     const newExpense: Expense = {
       ...newExpData,
@@ -249,7 +310,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
     };
 
     const updated = trips.map((t) => {
-      if (t.id === activeTrip.id) {
+      if (t.id === currentActive.id) {
         return {
           ...t,
           expenses: [newExpense, ...t.expenses],
@@ -263,11 +324,11 @@ export function TripApp({ initialTripId }: TripAppProps) {
 
   // Delete Expense
   const handleDeleteExpense = (expenseId: string) => {
-    const activeTrip = trips.find((t) => t.id === activeTripId);
-    if (!activeTrip) return;
+    const currentActive = trips.find((t) => t.id === activeTripId);
+    if (!currentActive) return;
 
     const updated = trips.map((t) => {
-      if (t.id === activeTrip.id) {
+      if (t.id === currentActive.id) {
         return {
           ...t,
           expenses: t.expenses.filter((e) => e.id !== expenseId),
@@ -276,13 +337,13 @@ export function TripApp({ initialTripId }: TripAppProps) {
       return t;
     });
 
-    saveTrips(updated);
+    saveTrips(updated, true);
   };
 
   // Settle Debt
   const handleConfirmSettlement = (settlementData: Omit<Settlement, 'id'>) => {
-    const activeTrip = trips.find((t) => t.id === activeTripId);
-    if (!activeTrip) return;
+    const currentActive = trips.find((t) => t.id === activeTripId);
+    if (!currentActive) return;
 
     const newSettlement: Settlement = {
       ...settlementData,
@@ -290,7 +351,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
     };
 
     const updated = trips.map((t) => {
-      if (t.id === activeTrip.id) {
+      if (t.id === currentActive.id) {
         return {
           ...t,
           settlements: [...(t.settlements || []), newSettlement],
@@ -365,7 +426,7 @@ export function TripApp({ initialTripId }: TripAppProps) {
     <div className="min-h-screen bg-[#091E15] text-[#d0e8d9] flex justify-center selection:bg-primary/30 selection:text-primary">
       {/* Mobile-First Constrained Wrapper */}
       <div className="w-full max-w-md min-h-screen flex flex-col relative bg-[#03170e] shadow-2xl border-x border-white/5 pb-24">
-        {/* Sticky Top Header with Switcher, Delete Trip, Invite & Profile */}
+        {/* Sticky Top Header with Home, Switcher, Delete Trip, Invite & Profile */}
         <Header
           trips={trips}
           activeTrip={activeTrip}
